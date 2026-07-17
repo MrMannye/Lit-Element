@@ -1,0 +1,770 @@
+<style>
+  :root{
+    --navy: #072146;
+    --core: #14549C;
+    --core-2: #0E3E75;
+    --aqua: #2DCCCD;
+    --light: #F2F6FA;
+    --gray: #5A6B7B;
+    --line: #D7E1EA;
+    --ink: #16232E;
+  }
+  *{ box-sizing: border-box; }
+  html, body{
+    margin: 0; padding: 0;
+    background: var(--light);
+    color: var(--ink);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    height: 100%;
+  }
+  bbva-practice-app{ display:block; min-height: 100vh; }
+  .spin{ animation: bbva-spin 0.8s linear infinite; }
+  @keyframes bbva-spin{ to{ transform: rotate(360deg); } }
+</style>
+
+<bbva-practice-app></bbva-practice-app>
+
+<script>
+/* =====================================================================
+   MINI RUNTIME COMPATIBLE CON LA API DE LitElement
+   ---------------------------------------------------------------------
+   El curso trata sobre Lit, así que este portal está construido con
+   Custom Elements + Shadow DOM + un ciclo de vida "reactive properties
+   → render()" que replica la forma de trabajar de LitElement. Para que
+   el artifact funcione sin depender de un CDN externo, esta es una
+   micro-implementación propia de LitElement/html/css (no la librería
+   oficial "lit" de npm), pero el patrón de componente es el mismo que
+   verás en los módulos del curso.
+===================================================================== */
+class LitElement extends HTMLElement {
+  static properties = {};
+  static styles = '';
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._reactiveValues = {};
+    const props = this.constructor.properties || {};
+    for (const key of Object.keys(props)) {
+      const def = props[key] || {};
+      let initial = 'default' in def ? def.default
+        : def.type === Boolean ? false
+        : def.type === Array ? []
+        : def.type === Object ? {}
+        : '';
+      this._reactiveValues[key] = initial;
+      Object.defineProperty(this, key, {
+        get: () => this._reactiveValues[key],
+        set: (v) => {
+          const old = this._reactiveValues[key];
+          if (old === v) return;
+          this._reactiveValues[key] = v;
+          this.requestUpdate();
+        },
+      });
+    }
+  }
+
+  connectedCallback() {
+    this._scheduleRender();
+  }
+
+  requestUpdate() {
+    this._scheduleRender();
+  }
+
+  _scheduleRender() {
+    if (this._pending) return;
+    this._pending = true;
+    queueMicrotask(() => {
+      this._pending = false;
+      this._doRender();
+    });
+  }
+
+  _doRender() {
+    const styles = this.constructor.styles ? `<style>${this.constructor.styles}</style>` : '';
+    const content = this.render ? this.render() : '';
+    this.shadowRoot.innerHTML = styles + content;
+    this._bindActions();
+    if (this.firstUpdated && !this._firstUpdateDone) {
+      this._firstUpdateDone = true;
+      this.firstUpdated();
+    }
+    if (this.updated) this.updated();
+  }
+
+  // Delega eventos declarados como data-on-click="metodo" y data-on-input="campo"
+  _bindActions() {
+    this.shadowRoot.querySelectorAll('[data-on-click]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        const method = el.getAttribute('data-on-click');
+        this[method] && this[method](e);
+      });
+    });
+    this.shadowRoot.querySelectorAll('[data-on-input]').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const field = el.getAttribute('data-on-input');
+        this[field] = el.type === 'checkbox' ? e.target.checked : e.target.value;
+      });
+    });
+  }
+
+  emit(name, detail) {
+    this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+}
+
+const html = (strings, ...values) =>
+  strings.reduce((acc, s, i) => acc + s + (values[i] !== undefined ? values[i] : ''), '');
+const css = html;
+
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+/* ---------------------------------------------------------------------
+   Ícono ns — glifos genéricos simples, sin dependencias externas
+--------------------------------------------------------------------- */
+function icon(name, size = 16, color = 'currentColor') {
+  const base = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const paths = {
+    check: `<polyline points="20 6 9 17 4 12"></polyline>`,
+    circle: `<circle cx="12" cy="12" r="9"></circle>`,
+    checkCircle: `<circle cx="12" cy="12" r="9"></circle><polyline points="8 12 11 15 16 9"></polyline>`,
+    copy: `<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>`,
+    send: `<polygon points="21 3 14 21 10 14 3 10 21 3"></polygon>`,
+    loader: `<circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9"></path>`,
+    terminal: `<polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>`,
+    list: `<line x1="9" y1="6" x2="20" y2="6"></line><line x1="9" y1="12" x2="20" y2="12"></line><line x1="9" y1="18" x2="20" y2="18"></line><circle cx="4.5" cy="6" r="1"></circle><circle cx="4.5" cy="12" r="1"></circle><circle cx="4.5" cy="18" r="1"></circle>`,
+    refresh: `<polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>`,
+    wand: `<path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"></path>`,
+    x: `<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>`,
+    sparkles: `<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2 2M16 16l2 2M6 18l2-2M16 8l2-2"></path>`,
+  };
+  return `<svg ${base}${name === 'loader' ? ' class="spin"' : ''}>${paths[name] || ''}</svg>`;
+}
+
+/* =====================================================================
+   CONTENIDO — 17 módulos + Proyecto Final
+===================================================================== */
+const MODULES = [
+  { id: 'm1', num: '01', title: 'Introducción a los AI Agents', lab: 'Mapea tu proceso actual',
+    description: 'Analiza el proceso actual para crear un componente Cells e identifica qué actividades pueden automatizarse con IA.',
+    checklist: [
+      'Escribí los pasos reales de mi proceso actual (de la historia al PR aprobado)',
+      "Clasifiqué cada paso: Manual / Automatizable hoy / Requiere agente",
+      "Identifiqué qué tipo de agente aplicaría a cada paso marcado como 'Requiere agente'",
+      'Escribí 3 conclusiones sobre dónde un AI Agent generaría más impacto',
+    ] },
+  { id: 'm2', num: '02', title: 'Arquitectura de un AI Agent', lab: 'Diseña el diagrama de tu agente',
+    description: 'Diseña el diagrama de un agente que pueda generar componentes Lit para BBVA.',
+    checklist: [
+      'Definí al menos 3 tools (crear archivo, leer convenciones, correr linter)',
+      'Definí qué guarda el agente en memoria de largo plazo',
+      'Definí en qué paso ocurre la Reflection y qué pasa si falla la validación',
+    ] },
+  { id: 'm3', num: '03', title: 'Lit + Cells Architecture', lab: 'Construye customer-card a mano',
+    description: 'Construye manualmente el componente customer-card, para compararlo luego contra la versión generada por IA.',
+    checklist: [
+      'Propiedades: name, accountNumber, balance',
+      'Evento card-selected emitido al hacer click',
+      "Slot 'footer' para acciones contextuales",
+      'Estilos encapsulados con static styles y tokens BBVA',
+    ] },
+  { id: 'm4', num: '04', title: 'Prompt Engineering para Lit', lab: 'Escribe 3 prompts reutilizables',
+    description: 'Escribe prompts reutilizables (estructura de 5 bloques) para generar bbva-card, bbva-button y bbva-modal.',
+    checklist: [
+      'Prompt para bbva-card (imagen, título, acción)',
+      'Prompt para bbva-button (variantes primary/secondary/disabled)',
+      'Prompt para bbva-modal (slot de contenido, evento de cierre)',
+    ],
+    promptLabel: 'Estructura base de 5 bloques',
+    promptTemplate: "Eres un ingeniero senior de Frontend en BBVA. Generas componentes Lit siguiendo la arquitectura Cells: naming en kebab-case con prefijo del dominio, propiedades tipadas, eventos documentados, soporte i18n y accesibilidad WCAG AA. Nunca uses librerías externas no aprobadas. Responde solo con bloques de código, un archivo por bloque.\n\n---\n\nGenera el componente \"bbva-card\" con:\n- properties: title, subtitle, imageUrl\n- evento \"card-click\"\n- slot \"actions\"\nEntrega: bbva-card.js, bbva-card.scss, bbva-card.test.js, README.md" },
+  { id: 'm5', num: '05', title: 'Construcción del primer AI Agent', lab: 'customer-profile con tu primer agente',
+    description: 'Configura tu primer agente (bucle Reason-Plan-Act) y genera customer-profile.js, .css y README.md.',
+    checklist: [
+      'Configuré el cliente del LLM (OpenAI o Azure OpenAI)',
+      'Implementé las tools createFile y readConventions',
+      "Ejecuté el agente con la instrucción 'Crear un componente customer-profile'",
+      'Comparé el resultado contra el customer-card hecho a mano en el Módulo 3',
+    ],
+    promptLabel: 'Instrucción de prueba',
+    promptTemplate: 'Crear un componente customer-profile' },
+  { id: 'm6', num: '06', title: 'AI Agent para generar componentes Lit', lab: 'Login Form con validaciones automáticas',
+    description: 'Genera login-form completo y añade una tool de validación automática que corra antes de entregar el resultado.',
+    checklist: [
+      'El agente generó login-form.js, .css, tests, README y Storybook',
+      'Agregué la tool validateComponent(files)',
+      'Forcé un error (quitar un evento) y confirmé que el agente lo detecta',
+    ],
+    promptLabel: 'Instrucción de prueba',
+    promptTemplate: 'Necesito un componente Login Form' },
+  { id: 'm7', num: '07', title: 'Agente para generar componentes Cells', lab: 'Paquete completo cells-login',
+    description: 'Construye un agente especializado en Cells que genere el paquete completo: componente, estilos, tests, demo, README y package.json.',
+    checklist: [
+      'Extendí el system prompt con las 5 reglas de Cells (naming, arquitectura, eventos, i18n, a11y)',
+      'Agregué la tool scaffoldCellsPackage(name)',
+      'Generé cells-login de punta a punta y verifiqué cada archivo esperado',
+    ],
+    promptLabel: 'System prompt del agente Cells',
+    promptTemplate: "Eres un generador de componentes Cells para BBVA. Todo componente debe usar prefijo 'cells-', kebab-case, texto vía i18n (nunca hardcodeado), atributos ARIA correctos y debe entregarse junto con estilos .scss, test.js, carpeta demo/, README.md y package.json.\n\n---\n\nGenera el paquete completo para \"cells-login\" con un formulario de usuario y contraseña." },
+  { id: 'm8', num: '08', title: 'AI Agent para Code Review', lab: 'Revisa un componente existente',
+    description: 'Pasa un componente ya generado por el Reviewer Agent y clasifica los hallazgos en los 5 ejes de revisión.',
+    checklist: [
+      'Ejecuté el Reviewer Agent sobre customer-card o login-form',
+      'Clasifiqué cada comentario: Clean Code / Accesibilidad / Lit Best Practices / Performance / Security',
+      'Identifiqué si hubo algún falso positivo',
+    ],
+    promptLabel: 'System prompt del Reviewer Agent',
+    promptTemplate: 'Revisa el siguiente componente Lit contra 5 ejes: Clean Code, Accesibilidad, Lit Best Practices, Performance y Security. Para cada hallazgo, responde con una línea iniciando en ❌ (problema) o ✔ (recomendación), sin párrafos largos. No reescribas el archivo completo, solo comenta.\n\n---\n\n[Pega aquí el código del componente a revisar]' },
+  { id: 'm9', num: '09', title: 'Agente para Refactoring', lab: 'Refactoriza un componente Cells antiguo',
+    description: 'Detecta malas prácticas en un componente antiguo y migra/optimiza sin romper su comportamiento.',
+    checklist: [
+      'Identifiqué al menos 2 malas prácticas en el componente de entrada',
+      'Pedí al agente un plan de refactor antes de tocar código',
+      'Los tests existentes siguieron pasando después del refactor',
+    ] },
+  { id: 'm10', num: '10', title: 'Agente para generar pruebas', lab: 'Suite de pruebas para customer-card',
+    description: 'Genera unit tests, mocks y fixtures con @open-wc/testing para customer-card.',
+    checklist: [
+      'Cubrí un test por propiedad pública (name, accountNumber, balance)',
+      'Cubrí el evento card-selected',
+      'Agregué al menos un test de estado de error o vacío',
+      'Corrí la suite con Web Test Runner y pasó en verde',
+    ] },
+  { id: 'm11', num: '11', title: 'Agente para documentación', lab: 'Documenta una librería completa',
+    description: 'Genera README para 3-4 componentes ya construidos y un INDEX.md que los enlace a todos.',
+    checklist: [
+      'Documenté al menos 3 componentes distintos',
+      'Cada README incluye props, eventos, slots, ejemplo e instalación',
+      'Generé un INDEX.md con enlaces a cada README',
+    ],
+    promptLabel: 'System prompt del Documentation Agent',
+    promptTemplate: 'Genera el README.md de este componente Lit usando solo lo que existe en el código: no inventes props ni eventos. Incluye las secciones: Instalación, Propiedades (tabla), Eventos (tabla), Slots, y un Ejemplo de uso.\n\n---\n\n[Pega aquí el código fuente del componente]' },
+  { id: 'm12', num: '12', title: 'AI Agent para Storybook', lab: 'Genera stories.js con variantes reales',
+    description: 'Genera el archivo de historias para login-form y cells-login con controles y variantes de estado real.',
+    checklist: [
+      'Generé stories.js para login-form',
+      'Generé stories.js para cells-login',
+      'Cada variante corresponde a un estado real soportado por el componente',
+      'Verifiqué los controles en Storybook local',
+    ] },
+  { id: 'm13', num: '13', title: 'Multi-Agent System', lab: 'Conecta el pipeline completo',
+    description: 'Conecta Architect, Developer, Reviewer, Testing y Documentation Agent en un único orquestador.',
+    checklist: [
+      'Definí el esquema JSON que pasa entre cada par de agentes',
+      'Conecté los 5 agentes en un único orquestador',
+      'Ejecuté el pipeline con una historia de usuario simple de punta a punta',
+    ] },
+  { id: 'm14', num: '14', title: 'Agente conectado a GitHub', lab: 'De un Issue a un Pull Request',
+    description: 'Conecta el pipeline del Módulo 13 a un repositorio y ejecútalo contra un Issue real.',
+    checklist: [
+      'Implementé readIssue, createBranch, commitFiles y openPullRequest',
+      'El agente nunca hace merge directo a main',
+      'El PR final contiene código, tests y documentación',
+    ] },
+  { id: 'm15', num: '15', title: 'Agente conectado a Azure DevOps', lab: 'De una User Story a un entregable',
+    description: 'Adapta las tools de GitHub a los endpoints de Azure DevOps y corre el mismo pipeline contra un Work Item.',
+    checklist: [
+      'Mapeé Issue → Work Item y Pull Request → Pull Request (Azure Repos)',
+      'Adapté las 4 tools a los endpoints REST de Azure DevOps',
+      'Corrí el pipeline completo contra un Work Item de práctica',
+    ] },
+  { id: 'm16', num: '16', title: 'AI Agent con MCP', lab: 'Consulta antes de generar',
+    description: 'Conecta el agente a un servidor MCP con documentación y componentes existentes para evitar duplicar código.',
+    checklist: [
+      'Conecté el agente a un servidor MCP (real o simulado)',
+      'El agente consulta componentes existentes antes de generar uno nuevo',
+      'Verifiqué que reutiliza un componente si ya existe uno equivalente',
+    ] },
+  { id: 'm17', num: '17', title: 'Agente con memoria', lab: 'Reglas persistentes de convención',
+    description: 'Guarda reglas de convención en memoria de largo plazo y verifica que el agente las respete sin repetirlas.',
+    checklist: [
+      'Guardé 3 reglas de convención en memoria de largo plazo',
+      'Generé un componente nuevo sin mencionar las reglas en el prompt',
+      'Confirmé que el agente las respetó igualmente',
+    ],
+    promptLabel: 'Ejemplo de regla persistente',
+    promptTemplate: 'Siempre usa componentes BBVA. Sigue la arquitectura Cells. Todo texto va vía i18n.' },
+  { id: 'final', num: 'PF', title: 'Proyecto Final', lab: 'AI Cells Software Engineer',
+    description: 'Integra todo el curso: un sistema de agentes que recibe una historia de usuario y entrega un componente Lit listo para revisión.',
+    checklist: [
+      'El sistema analiza la historia de usuario y diseña la estructura del componente',
+      'Genera componente, estilos, pruebas, documentación y Storybook',
+      'Ejecuta una revisión automática con recomendaciones',
+      'Produce un resumen de cambios listo para Pull Request',
+    ],
+    promptLabel: 'Historia de usuario de entrada',
+    promptTemplate: 'Como cliente quiero visualizar mi saldo disponible para poder consultar mi cuenta.' },
+];
+const TOTAL = MODULES.length;
+
+const TOOL_DEF = {
+  name: 'createLitComponent',
+  description: 'Crea un componente Lit siguiendo la arquitectura Cells de BBVA',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Nombre kebab-case del componente' },
+      properties: { type: 'array', items: { type: 'string' }, description: 'Propiedades reactivas' },
+      events: { type: 'array', items: { type: 'string' }, description: 'Custom events que emite' },
+    },
+    required: ['name'],
+  },
+};
+
+/* =====================================================================
+   <bbva-lab-checklist>
+===================================================================== */
+class BbvaLabChecklist extends LitElement {
+  static properties = { items: { type: Array, default: [] }, checked: { type: Array, default: [] } };
+  static styles = css`
+    :host{ display:block; }
+    .item{ display:flex; align-items:flex-start; gap:10px; padding:6px 0; cursor:pointer; font-size:13.5px; }
+    .item svg{ flex-shrink:0; margin-top:2px; }
+    .done{ color: var(--gray); text-decoration: line-through; }
+    .pending{ color: var(--ink); }
+  `;
+  render() {
+    return html`
+      ${this.items.map((item, i) => html`
+        <div class="item" data-idx="${i}">
+          ${this.checked[i] ? icon('checkCircle', 18, '#14549C') : icon('circle', 18, '#5A6B7B')}
+          <span class="${this.checked[i] ? 'done' : 'pending'}">${escapeHtml(item)}</span>
+        </div>
+      `).join('')}
+    `;
+  }
+  _bindActions() {
+    super._bindActions();
+    this.shadowRoot.querySelectorAll('[data-idx]').forEach((el) => {
+      el.addEventListener('click', () => this.emit('toggle', { idx: Number(el.getAttribute('data-idx')) }));
+    });
+  }
+}
+customElements.define('bbva-lab-checklist', BbvaLabChecklist);
+
+/* =====================================================================
+   <bbva-module-sidebar>
+===================================================================== */
+class BbvaModuleSidebar extends LitElement {
+  static properties = { selected: { type: String, default: '' }, doneMap: { type: Object, default: {} } };
+  static styles = css`
+    :host{ display:block; width:288px; flex-shrink:0; overflow-y:auto; border-right:1px solid var(--line); background:#fff; height:100%; }
+    .row{ width:100%; text-align:left; padding:12px 16px; display:flex; align-items:flex-start; gap:12px; border-bottom:1px solid var(--line); cursor:pointer; background:transparent; border-left:none; border-right:none; border-top:none; }
+    .row.active{ background: var(--light); }
+    .badge{ width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; margin-top:2px; color:#fff; }
+    .title{ font-size:13px; font-weight:600; line-height:1.3; }
+    .lab{ font-size:11px; color:var(--gray); margin-top:2px; }
+    .check{ margin-left:auto; margin-top:4px; flex-shrink:0; }
+    .reset{ width:100%; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--gray); padding:12px; background:none; border:none; cursor:pointer; }
+  `;
+  render() {
+    return html`
+      ${MODULES.map((m) => {
+        const done = this.doneMap[m.id];
+        const active = m.id === this.selected;
+        const badgeBg = done ? 'var(--aqua)' : active ? 'var(--core)' : 'var(--navy)';
+        const badgeColor = done ? 'var(--navy)' : '#fff';
+        return html`
+          <button class="row ${active ? 'active' : ''}" data-mid="${m.id}">
+            <div class="badge" style="background:${badgeBg}; color:${badgeColor};">${m.num}</div>
+            <div style="min-width:0;">
+              <div class="title" style="color:${active ? 'var(--core-2)' : 'var(--ink)'};">${escapeHtml(m.title)}</div>
+              <div class="lab">${escapeHtml(m.lab)}</div>
+            </div>
+            ${done ? `<div class="check">${icon('checkCircle', 16, '#14549C')}</div>` : ''}
+          </button>
+        `;
+      }).join('')}
+      <button class="reset" data-on-click="_onReset">${icon('refresh', 13)} Reiniciar progreso</button>
+    `;
+  }
+  _bindActions() {
+    super._bindActions();
+    this.shadowRoot.querySelectorAll('[data-mid]').forEach((el) => {
+      el.addEventListener('click', () => this.emit('select', { id: el.getAttribute('data-mid') }));
+    });
+  }
+  _onReset() { this.emit('reset', {}); }
+}
+customElements.define('bbva-module-sidebar', BbvaModuleSidebar);
+
+/* =====================================================================
+   <bbva-module-detail>
+===================================================================== */
+class BbvaModuleDetail extends LitElement {
+  static properties = { module: { type: Object, default: null }, checked: { type: Array, default: [] }, copied: { type: Boolean, default: false } };
+  static styles = css`
+    :host{ display:block; flex:1; overflow-y:auto; padding:32px; }
+    .wrap{ max-width:640px; }
+    .kicker{ font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--core); margin-bottom:8px; }
+    h1{ font-size:24px; font-weight:800; color:var(--navy); margin:0 0 8px 0; }
+    .desc{ font-size:14px; color:var(--gray); margin:0 0 24px 0; line-height:1.5; }
+    .card{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px; margin-bottom:24px; }
+    .cardlabel{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--core-2); margin-bottom:12px; }
+    .promptbox{ position:relative; background:var(--navy); border-radius:10px; padding:16px; }
+    pre{ color:#E8F0FA; font-size:12px; line-height:1.6; white-space:pre-wrap; font-family: 'Courier New', monospace; margin:0; padding-right:32px; }
+    .copybtn{ position:absolute; top:12px; right:12px; background:rgba(255,255,255,0.1); border:none; border-radius:6px; padding:6px; cursor:pointer; display:flex; }
+    .trybtn{ margin-top:12px; font-size:12px; font-weight:700; color:var(--core); background:none; border:none; cursor:pointer; display:flex; align-items:center; gap:6px; padding:0; }
+  `;
+  render() {
+    if (!this.module) return '';
+    const m = this.module;
+    return html`
+      <div class="wrap">
+        <div class="kicker">Módulo ${m.num} · Laboratorio</div>
+        <h1>${escapeHtml(m.lab)}</h1>
+        <p class="desc">${escapeHtml(m.description)}</p>
+
+        <div class="card">
+          <div class="cardlabel">Checklist de aceptación</div>
+          <bbva-lab-checklist id="checklist"></bbva-lab-checklist>
+        </div>
+
+        ${m.promptTemplate ? html`
+          <div class="cardlabel">${escapeHtml(m.promptLabel || 'Prompt de referencia')}</div>
+          <div class="promptbox">
+            <pre>${escapeHtml(m.promptTemplate)}</pre>
+            <button class="copybtn" data-on-click="_copy">${icon(this.copied ? 'check' : 'copy', 14, this.copied ? '#2DCCCD' : '#EAF2FB')}</button>
+          </div>
+          <button class="trybtn" data-on-click="_try">${icon('wand', 13)} Probarlo en el Playground</button>
+        ` : ''}
+      </div>
+    `;
+  }
+  updated() {
+    const list = this.shadowRoot.getElementById('checklist');
+    if (list && this.module) {
+      list.items = this.module.checklist;
+      list.checked = this.checked;
+      list.onclick = null;
+      list.removeEventListener('toggle', this._onToggle);
+      this._onToggle = (e) => this.emit('toggle-check', { idx: e.detail.idx });
+      list.addEventListener('toggle', this._onToggle);
+    }
+  }
+  _copy() {
+    const text = this.module.promptTemplate;
+    this._copyText(text);
+    this.copied = true;
+    setTimeout(() => { this.copied = false; }, 1500);
+  }
+  _copyText(text) {
+    try {
+      navigator.clipboard.writeText(text);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (err) {}
+      document.body.removeChild(ta);
+    }
+  }
+  _try() {
+    const parts = this.module.promptTemplate.split('\n\n---\n\n');
+    if (parts.length === 2) {
+      this.emit('try-playground', { system: parts[0], user: parts[1] });
+    } else {
+      this.emit('try-playground', { system: '', user: this.module.promptTemplate });
+    }
+  }
+}
+customElements.define('bbva-module-detail', BbvaModuleDetail);
+
+/* =====================================================================
+   <bbva-prompt-playground>
+===================================================================== */
+class BbvaPromptPlayground extends LitElement {
+  static properties = {
+    loading: { type: Boolean, default: false },
+    response: { type: Array, default: null },
+    error: { type: String, default: '' },
+  };
+  static styles = css`
+    :host{ display:block; flex:1; overflow-y:auto; padding:32px; }
+    .wrap{ max-width:720px; margin:0 auto; }
+    .kicker{ font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--core); margin-bottom:8px; }
+    h1{ font-size:24px; font-weight:800; color:var(--navy); margin:0 0 8px 0; }
+    .desc{ font-size:14px; color:var(--gray); margin:0 0 20px 0; line-height:1.55; }
+    label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--core-2); display:block; margin-bottom:6px; }
+    textarea{ width:100%; border:1px solid var(--line); border-radius:8px; padding:10px; font-size:13px; font-family: 'Courier New', monospace; resize: vertical; }
+    .field{ margin-bottom:16px; }
+    .row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px; }
+    .toolcheck{ font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    button.run{ background:var(--core); color:#fff; border:none; border-radius:8px; padding:10px 18px; font-size:13.5px; font-weight:700; display:flex; align-items:center; gap:8px; cursor:pointer; }
+    button.run:disabled{ opacity:0.6; cursor:default; }
+    .err{ background:#FDECEC; color:#8A1F1F; border-radius:8px; padding:14px; font-size:13.5px; margin-bottom:16px; display:flex; gap:8px; }
+    .resp{ background:var(--navy); border-radius:10px; padding:20px; }
+    .resplabel{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--aqua); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+    .resp p{ color:#EAF2FB; font-size:13.5px; line-height:1.6; white-space:pre-wrap; margin:0 0 12px 0; }
+    .toolcall{ margin-bottom:12px; }
+    .toollabel{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--aqua); margin-bottom:6px; }
+    pre.toolbody{ background:rgba(255,255,255,0.07); border-radius:6px; padding:10px; color:#E8F0FA; font-size:12px; font-family:'Courier New',monospace; white-space:pre-wrap; margin:0; }
+    .empty{ border:1.5px dashed var(--line); border-radius:10px; padding:32px; text-align:center; font-size:13.5px; color:var(--gray); }
+  `;
+  constructor() {
+    super();
+    this._sys = 'Eres un ingeniero senior de Frontend en BBVA, experto en Lit y en la arquitectura Cells.';
+    this._user = 'Genera el componente "bbva-badge" con una propiedad "status" (success/warning/error).';
+    this._useTool = false;
+  }
+  setPrompts(system, user) {
+    this._sys = system || this._sys;
+    this._user = user || this._user;
+    this.response = null;
+    this.error = '';
+    this.requestUpdate();
+  }
+  render() {
+    return html`
+      <div class="wrap">
+        <div class="kicker">Prompt Playground</div>
+        <h1>Practica prompts contra Claude en vivo</h1>
+        <p class="desc">Escribe un system prompt y una instrucción, tal como lo harías con el agente de los Módulos 4-8, y observa la respuesta real del modelo. Activa "Function Calling" para ver cómo Claude decide invocar una herramienta en vez de solo responder texto (Módulo 2).</p>
+
+        <div class="field">
+          <label>System prompt (rol + convenciones)</label>
+          <textarea rows="3" id="sysbox" data-on-input="_sys">${escapeHtml(this._sys)}</textarea>
+        </div>
+        <div class="field">
+          <label>User prompt (la tarea)</label>
+          <textarea rows="4" id="userbox" data-on-input="_user">${escapeHtml(this._user)}</textarea>
+        </div>
+
+        <div class="row">
+          <label class="toolcheck" style="margin:0;">
+            <input type="checkbox" id="toolcheck" ${this._useTool ? 'checked' : ''} />
+            Incluir herramienta <code style="color:var(--core);">createLitComponent</code> (Function Calling)
+          </label>
+          <button class="run" data-on-click="_run" ${this.loading ? 'disabled' : ''}>
+            ${icon(this.loading ? 'loader' : 'send', 16, '#fff')} ${this.loading ? 'Enviando...' : 'Ejecutar'}
+          </button>
+        </div>
+
+        ${this.error ? html`<div class="err">${icon('x', 16)} ${escapeHtml(this.error)}</div>` : ''}
+
+        ${this.response ? html`
+          <div class="resp">
+            <div class="resplabel">${icon('sparkles', 13, '#2DCCCD')} Respuesta de Claude</div>
+            ${this.response.length === 0 ? '<p>(Respuesta vacía)</p>' : this.response.map((block) => {
+              if (block.type === 'text') return `<p>${escapeHtml(block.text)}</p>`;
+              if (block.type === 'tool_use') return `
+                <div class="toolcall">
+                  <div class="toollabel">tool_call → ${escapeHtml(block.name)}</div>
+                  <pre class="toolbody">${escapeHtml(JSON.stringify(block.input, null, 2))}</pre>
+                </div>`;
+              return '';
+            }).join('')}
+          </div>
+        ` : !this.error && !this.loading ? html`
+          <div class="empty">Escribe tu prompt y pulsa "Ejecutar" para ver la respuesta aquí.</div>
+        ` : ''}
+      </div>
+    `;
+  }
+  _bindActions() {
+    super._bindActions();
+    const cb = this.shadowRoot.getElementById('toolcheck');
+    if (cb) cb.addEventListener('change', (e) => { this._useTool = e.target.checked; });
+    // Restaurar foco/cursor: no re-renderizamos en cada tecleo (ver data-on-input),
+    // así que no hace falta reposicionar el cursor aquí.
+  }
+  async _run() {
+    const sysEl = this.shadowRoot.getElementById('sysbox');
+    const userEl = this.shadowRoot.getElementById('userbox');
+    const sys = sysEl ? sysEl.value : this._sys;
+    const user = userEl ? userEl.value : this._user;
+    this._sys = sys;
+    this._user = user;
+    this.loading = true;
+    this.error = '';
+    this.response = null;
+    try {
+      const body = {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: sys,
+        messages: [{ role: 'user', content: user }],
+      };
+      if (this._useTool) body.tools = [TOOL_DEF];
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data && data.error) {
+        this.error = data.error.message || 'Error desconocido de la API';
+      } else {
+        this.response = data.content || [];
+      }
+    } catch (e) {
+      this.error = 'No se pudo conectar con la API. Intenta de nuevo.';
+    } finally {
+      this.loading = false;
+    }
+  }
+}
+customElements.define('bbva-prompt-playground', BbvaPromptPlayground);
+
+/* =====================================================================
+   <bbva-practice-app>  (root)
+===================================================================== */
+class BbvaPracticeApp extends LitElement {
+  static properties = {
+    view: { type: String, default: 'modules' },
+    selected: { type: String, default: 'm1' },
+    progress: { type: Object, default: {} },
+    ready: { type: Boolean, default: false },
+  };
+  static styles = css`
+    :host{ display:flex; flex-direction:column; min-height:100vh; }
+    header{ background:var(--navy); color:#fff; padding:18px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; }
+    .brand-sm{ font-size:13px; font-weight:700; letter-spacing:0.3px; }
+    .brand-lg{ font-size:17px; font-weight:800; margin-top:2px; }
+    .right{ display:flex; align-items:center; gap:14px; }
+    .tabs{ display:flex; background:rgba(255,255,255,0.1); border-radius:8px; padding:4px; }
+    .tab{ padding:7px 12px; border-radius:6px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px; cursor:pointer; border:none; background:transparent; color:#EAF2FB; }
+    .tab.active{ background:var(--aqua); color:var(--navy); }
+    .progresstext{ text-align:right; }
+    .progresstext .l{ font-size:9.5px; text-transform:uppercase; letter-spacing:1px; opacity:0.7; }
+    .progresstext .v{ font-size:13px; font-weight:700; color:var(--aqua); }
+    .bar{ width:96px; height:8px; border-radius:8px; background:rgba(255,255,255,0.15); overflow:hidden; }
+    .bar > div{ height:100%; background:var(--aqua); border-radius:8px; }
+    main{ flex:1; display:flex; overflow:hidden; }
+    footer{ padding:10px 24px; font-size:10.5px; color:var(--gray); border-top:1px solid var(--line); background:#fff; display:flex; justify-content:space-between; }
+  `;
+  connectedCallback() {
+    super.connectedCallback();
+    this._loadProgress();
+  }
+  async _loadProgress() {
+    const next = {};
+    for (const m of MODULES) {
+      try {
+        const r = await window.storage.get(`progress_${m.id}`);
+        next[m.id] = r ? JSON.parse(r.value) : m.checklist.map(() => false);
+      } catch (e) {
+        next[m.id] = m.checklist.map(() => false);
+      }
+    }
+    this.progress = next;
+    this.ready = true;
+  }
+  _doneMap() {
+    const map = {};
+    for (const m of MODULES) {
+      const arr = this.progress[m.id];
+      map[m.id] = !!(arr && arr.length > 0 && arr.every(Boolean));
+    }
+    return map;
+  }
+  render() {
+    const doneMap = this._doneMap();
+    const completed = Object.values(doneMap).filter(Boolean).length;
+    const pct = Math.round((completed / TOTAL) * 100);
+    return html`
+      <header>
+        <div>
+          <div class="brand-sm">BBVA<span style="color:var(--aqua);">·</span>AI Engineering</div>
+          <div class="brand-lg">Portal de Práctica · AI Cells Software Engineer</div>
+        </div>
+        <div class="right">
+          <div class="tabs">
+            <button class="tab ${this.view === 'modules' ? 'active' : ''}" data-on-click="_showModules">${icon('list', 14)} Ejercicios</button>
+            <button class="tab ${this.view === 'playground' ? 'active' : ''}" data-on-click="_showPlayground">${icon('terminal', 14)} Prompt Playground</button>
+          </div>
+          <div class="progresstext">
+            <div class="l">Progreso</div>
+            <div class="v">${completed} / ${TOTAL} módulos</div>
+          </div>
+          <div class="bar"><div style="width:${pct}%;"></div></div>
+        </div>
+      </header>
+      <main id="main"></main>
+      <footer>
+        <span>Material del facilitador · Uso interno BBVA</span>
+        <span>Building AI Agents for SWE — Lit &amp; Cells</span>
+      </footer>
+    `;
+  }
+  updated() {
+    const main = this.shadowRoot.getElementById('main');
+    if (!main) return;
+    main.style.display = 'flex';
+    main.style.width = '100%';
+    main.style.overflow = 'hidden';
+
+    if (this.view === 'modules') {
+      if (!this._sidebarEl) {
+        main.innerHTML = '';
+        this._sidebarEl = document.createElement('bbva-module-sidebar');
+        this._detailEl = document.createElement('bbva-module-detail');
+        this._sidebarEl.addEventListener('select', (e) => { this.selected = e.detail.id; });
+        this._sidebarEl.addEventListener('reset', () => this._resetProgress());
+        this._detailEl.addEventListener('toggle-check', (e) => this._toggleCheck(e.detail.idx));
+        this._detailEl.addEventListener('try-playground', (e) => this._tryInPlayground(e.detail));
+        main.appendChild(this._sidebarEl);
+        main.appendChild(this._detailEl);
+      } else if (!main.contains(this._sidebarEl)) {
+        main.innerHTML = '';
+        main.appendChild(this._sidebarEl);
+        main.appendChild(this._detailEl);
+      }
+      this._sidebarEl.selected = this.selected;
+      this._sidebarEl.doneMap = doneMapCache(this);
+      const mod = MODULES.find((m) => m.id === this.selected);
+      this._detailEl.module = mod;
+      this._detailEl.checked = this.progress[this.selected] || [];
+    } else {
+      if (!this._pgEl) {
+        this._pgEl = document.createElement('bbva-prompt-playground');
+      }
+      if (!main.contains(this._pgEl)) {
+        main.innerHTML = '';
+        main.appendChild(this._pgEl);
+      }
+    }
+  }
+  _showModules() { this.view = 'modules'; }
+  _showPlayground() { this.view = 'playground'; }
+  _toggleCheck(idx) {
+    const arr = (this.progress[this.selected] || []).slice();
+    arr[idx] = !arr[idx];
+    const next = { ...this.progress, [this.selected]: arr };
+    this.progress = next;
+    window.storage.set(`progress_${this.selected}`, JSON.stringify(arr)).catch(() => {});
+  }
+  async _resetProgress() {
+    const next = {};
+    for (const m of MODULES) {
+      const empty = m.checklist.map(() => false);
+      next[m.id] = empty;
+      try { await window.storage.set(`progress_${m.id}`, JSON.stringify(empty)); } catch (e) {}
+    }
+    this.progress = next;
+  }
+  _tryInPlayground(detail) {
+    this.view = 'playground';
+    requestAnimationFrame(() => {
+      if (this._pgEl) this._pgEl.setPrompts(detail.system, detail.user);
+    });
+  }
+}
+function doneMapCache(app) {
+  const map = {};
+  for (const m of MODULES) {
+    const arr = app.progress[m.id];
+    map[m.id] = !!(arr && arr.length > 0 && arr.every(Boolean));
+  }
+  return map;
+}
+customElements.define('bbva-practice-app', BbvaPracticeApp);
+</script>
